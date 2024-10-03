@@ -12,13 +12,8 @@ Matrix4f Object::model() {
     scaleMatrix(2, 2) = scaling.z();
  
     // Create the rotation matrix
-    Eigen::Matrix3f rotationMatrix3;
     const Quaternionf& r = rotation;
-    auto [x_angle, y_angle, z_angle] = quaternion_to_ZYX_euler(r.w(), r.x(),r.y(), r.z());
-    rotationMatrix3 = (Eigen::AngleAxisf(radians(x_angle), Vector3f(1, 0, 0)) 
-                        * Eigen::AngleAxisf(radians(y_angle), Vector3f(0, 1, 0)) 
-                        * Eigen::AngleAxisf(radians(z_angle), Vector3f(0, 0, 1))).toRotationMatrix();
-    rotationMatrix.block<3, 3>(0, 0) = rotationMatrix3;
+    rotationMatrix.block<3, 3>(0, 0) = r.toRotationMatrix();
 
 # ifdef DEBUG
     // Output the matrix by using logger
