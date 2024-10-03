@@ -1,0 +1,170 @@
+name: Dandelion-release CI
+
+env:
+  GH_TOKEN: ${{ github.token }} # Needed by gh cli
+  DANDELION_AUTOBUILD_REPO: XJTU-Graphics/dandelion-autobuild
+
+on:
+  workflow_dispatch:
+
+  workflow_run:
+    workflows: ["Dandelion-dev CI"]
+    types:
+      - completed
+
+jobs:
+  
+  build_windows_x64_msvc:
+    runs-on: windows-2022
+    strategy:
+      matrix:
+        build_type: [debug, release]
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Get lib
+        run: |
+          Invoke-WebRequest -Uri https://github.com/${{ github.repository }}/releases/download/nightly/dandelion-windows_msvc-x64-lib-${{ matrix.build_type }}.zip -OutFile "deps\l.zip"
+          7z x -tzip .\deps\l.zip -o"deps"
+
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: dandelion-windows_msvc-x64-release-${{ matrix.build_type }}
+          variant: sccache
+      
+      - name: Generate VS build file
+        run: |
+          New-Item -ItemType "directory" build
+          cmake -G "Visual Studio 17 2022" -S . -B build -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+      
+      - name: Build Dandelion
+        run: cmake --build build --config ${{ matrix.build_type }} --parallel $Env:NUMBER_OF_PROCESSORS
+
+  build_macos:
+    runs-on: macos-14
+    strategy:
+      matrix:
+        build_type: [debug, release]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get lib
+        run: |
+          curl -L https://github.com/${{ github.repository }}/releases/download/nightly/dandelion-macos-arm64-lib-${{ matrix.build_type }}.zip -o "deps/l.zip"
+          7z x -tzip ./deps/l.zip -o"deps"
+
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: dandelion-macos-arm64-release-${{ matrix.build_type }}
+      
+      - name: Generate build file
+        run: |
+          mkdir -p build
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -D CMAKE_C_COMPILER_LAUNCHER=ccache -D CMAKE_CXX_COMPILER_LAUNCHER=ccache
+      
+      - name: Build Dandelion
+        run: cmake --build build --parallel $(sysctl -n hw.activecpu)
+
+  build_windows_x64_mingw:
+    runs-on: windows-2022
+    strategy:
+      matrix:
+        sys: [ucrt64, clang64]
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: ${{ matrix.sys }}
+          path-type: inherit
+          update: false
+          install: >-
+            git
+            make
+          pacboy: >-
+            toolchain:p
+            cmake:p
+            ninja:p
+
+      - name: Checkout dandelion-autobuild
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.DANDELION_AUTOBUILD_REPO }}
+      
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: dandelion-windows_${{ matrix.sys }}-x64-release
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          path: dandelion
+
+      - name: Get lib
+        run: |
+          mkdir build
+          curl -L https://github.com/${{ github.repository }}/releases/download/nightly/dandelion-windows_${{ matrix.sys }}-x64-lib-debug.zip -o "./dandelion/deps/ld.zip"
+          curl -L https://github.com/${{ github.repository }}/releases/download/nightly/dandelion-windows_${{ matrix.sys }}-x64-lib-release.zip -o "./dandelion/deps/lr.zip"
+          7z x -tzip ./dandelion/deps/ld.zip -o"./dandelion/deps"
+          7z x -tzip ./dandelion/deps/lr.zip -o"./dandelion/deps"
+      
+      - name: Build.sh
+        env:
+          OS_NAME: ${{ matrix.sys }}
+          DANDELION_PATH: dandelion
+          BUILD_PATH: build
+          BUILD_OUTPUT_PATH: build_output
+        run: |
+          mkdir build_output
+          # apply a temporary patch to allow ccache to be used
+          sed -i '/-DCMAKE_BUILD_TYPE=\(Debug\|Release\)/ s/\(-DCMAKE_BUILD_TYPE=\(Debug\|Release\)\)/\1 -D CMAKE_C_COMPILER_LAUNCHER=ccache -D CMAKE_CXX_COMPILER_LAUNCHER=ccache/' build.sh
+          bash build.sh ${{ matrix.build_kind }}
+
+  build_linux:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        sys: [archlinux, debian-12, fedora, ubuntu-22.04, ubuntu-24.04]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout dandelion-autobuild
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.DANDELION_AUTOBUILD_REPO }}
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          path: dandelion
+      
+      - name: Get lib
+        run: |
+          curl -L https://github.com/${{ github.repository }}/releases/download/nightly/dandelion-linux-x64-lib-debug.zip -o "./dandelion/deps/ld.zip"
+          curl -L https://github.com/${{ github.repository }}/releases/download/nightly/dandelion-linux-x64-lib-release.zip -o "./dandelion/deps/lr.zip"
+          7z x -tzip ./dandelion/deps/ld.zip -o"./dandelion/deps"
+          7z x -tzip ./dandelion/deps/lr.zip -o"./dandelion/deps"
+
+      - if: ${{ matrix.sys == 'archlinux' }}
+        name: Update rolling distribution images
+        run: |
+          python3 build_all.py -u
+
+      - name: Build docker image
+        run: |
+          python3 build_all.py --build-images -i dockerfiles/${{ matrix.sys }}.Dockerfile
+
+      - name: Build dandelion
+        run: |
+          python3 build_all.py --build --build-kind release -i dockerfiles/${{ matrix.sys }}.Dockerfile
