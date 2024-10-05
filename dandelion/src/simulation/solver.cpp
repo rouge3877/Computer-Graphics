@@ -16,7 +16,12 @@ KineticState derivative(const KineticState& state)
 KineticState forward_euler_step([[maybe_unused]] const KineticState& previous,
                                 const KineticState& current)
 {
-    return current;
+    KineticState next;
+    next.acceleration = current.acceleration;
+    next.position = current.position + time_step * current.velocity;
+    next.velocity = current.velocity + time_step * current.acceleration;
+
+    return next;
 }
 
 // Function to perform a single Runge-Kutta step

@@ -100,6 +100,11 @@ void Object::update(vector<Object*>& all_objects)
         }
     }
     // 将上一步状态赋值为当前状态，并将物体更新到下一步状态。
+    prev_state = current_state;
+    center     = next_state.position;
+    velocity   = next_state.velocity;
+    force      = next_state.acceleration * mass;
+
 }
 
 void Object::render(const Shader& shader, WorkingMode mode, bool selected)

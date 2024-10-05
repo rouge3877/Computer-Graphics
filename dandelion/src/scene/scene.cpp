@@ -303,4 +303,14 @@ void Scene::simulation_update()
     // time_step ，当总时长不够一个 time_step 时停止模拟。
 
     // 根据刚才模拟时间步的数量，更新最后一次调用 simulation_update 的时间 (last_update)。
+
+    time_point now = steady_clock::now();
+    duration elapsed = duration_cast<duration>(now - last_update);
+    auto total_time = elapsed.count();
+    while (total_time > time_step) {
+        for (auto object : all_objects) {
+            object->update(all_objects);
+        }
+        total_time -= time_step;
+    }
 }
