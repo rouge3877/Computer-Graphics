@@ -304,13 +304,14 @@ void Scene::simulation_update()
 
     // 根据刚才模拟时间步的数量，更新最后一次调用 simulation_update 的时间 (last_update)。
 
-    time_point now = steady_clock::now();
-    duration elapsed = duration_cast<duration>(now - last_update);
-    auto total_time = elapsed.count();
-    while (total_time > time_step) {
-        for (auto object : all_objects) {
-            object->update(all_objects);
-        }
-        total_time -= time_step;
+    auto sim_begin_clock = steady_clock::now();
+    auto duration_time = duration(sim_begin_clock - last_update).count();
+
+    while (duration_time > time_step) {
+        for (auto object : all_objects) object->update(all_objects);
+        duration_time -= time_step;
     }
+    
+    last_update = sim_begin_clock - 
+                duration_cast<decltype(last_update)::duration>(duration(duration_time));
 }
