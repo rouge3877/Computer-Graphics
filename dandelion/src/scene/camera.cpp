@@ -65,18 +65,18 @@ Matrix4f Camera::projection()
     // return projection;                                                       //
     //////////////////////////////////////////////////////////////////////////////
 
-    const float top = near * std::tan(radians(fov_y_degrees) / 2);
+    const float top = near_plane * std::tan(radians(fov_y_degrees) / 2);
     const float right = top * aspect_ratio;
 
     Matrix4f projection;
-    projection << near/right, 0, 0, 0,
-                  0, near/top, 0, 0,
-                  0, 0, -(far + near) / (far - near), -2 * far * near / (far - near),
+    projection << near_plane/right, 0, 0, 0,
+                  0, near_plane/top, 0, 0,
+                  0, 0, -(far_plane + near_plane) / (far_plane - near_plane), -2 * far_plane * near_plane / (far_plane - near_plane),
                   0, 0, -1, 0;
 
 #ifdef DEBUG
     spdlog::info("top: {}, right: {}", top, right);
-    spdlog::info("near: {}, far: {}", near, far);
+    spdlog::info("near: {}, far: {}", near_plane, far_plane);
     spdlog::info("Projection matrix: {}\n", projection);
 #endif
 

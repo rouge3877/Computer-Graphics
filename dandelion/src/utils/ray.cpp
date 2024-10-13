@@ -74,7 +74,8 @@ optional<Intersection> naive_intersect(const Ray& ray, const GL::Mesh& mesh, con
         Vector3f v1 = (model * mesh.vertex(facesIndex[1]).homogeneous()).block<3, 1>(0, 0);
         Vector3f v2 = (model * mesh.vertex(facesIndex[2]).homogeneous()).block<3, 1>(0, 0);
 
-        Matrix3f M << -ray.direction, v1 - v0, v2 - v0;
+        Matrix3f M;
+        M << -ray.direction, v1 - v0, v2 - v0;
 
         float det = M.determinant();
         if(std::fabs(det) < eps){
