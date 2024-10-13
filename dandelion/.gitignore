@@ -41,8 +41,8 @@ test/input/
 test/ans/
 
 # For Pre-compiled static libs -------------------
-# deps/libdandelion-*.a
-# deps/dandelion-*.lib
+deps/libdandelion-*.a
+deps/dandelion-*.lib
 
 # For Doxygen ------------------------------------
 docs/build/

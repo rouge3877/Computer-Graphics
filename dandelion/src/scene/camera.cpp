@@ -75,9 +75,9 @@ Matrix4f Camera::projection()
                   0, 0, -1, 0;
 
 #ifdef DEBUG
-    spdlog::info("top: {}, right: {}", top, right);
-    spdlog::info("near: {}, far: {}", near_plane, far_plane);
-    spdlog::info("Projection matrix: {}\n", projection);
+    spdlog::trace("top: {}, right: {}", top, right);
+    spdlog::trace("near: {}, far: {}", near_plane, far_plane);
+    spdlog::trace("Projection matrix: {}\n", projection);
 #endif
 
     return projection;
