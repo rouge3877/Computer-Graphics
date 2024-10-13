@@ -62,9 +62,9 @@ Matrix4f Object::model() {
 
 # ifdef DEBUG
     // Output the matrix by using logger
-    logger->info("scaling matrix: \n{}", scaleMatrix);
-    logger->info("rotation matrix: \n{}", rotationMatrix);  
-    logger->info("center matrix: \n{}", translationMatrix);
+    logger->trace("scaling matrix: \n{}", scaleMatrix);
+    logger->trace("rotation matrix: \n{}", rotationMatrix);  
+    logger->trace("center matrix: \n{}", translationMatrix);
 # endif
 
     Matrix4f modelMatrix = translationMatrix * rotationMatrix * scaleMatrix;
