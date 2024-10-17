@@ -56,7 +56,7 @@ set(DANDELION_SCENE_SOURCES
 )
 set(DANDELION_UTILS_SOURCES
     src/utils/stb_image_wrapper.cpp
-    # src/utils/ray.cpp
+    src/utils/ray.cpp
     # src/utils/aabb.cpp
     # src/utils/bvh.cpp
     src/utils/kinetic_state.cpp
@@ -105,8 +105,8 @@ target_link_libraries(${PROJECT_NAME}
     glfw
     assimp
     fmt::fmt
-    debug dandelion-ray-debug
-    optimized dandelion-ray
+    # debug dandelion-ray-debug
+    # optimized dandelion-ray
     debug dandelion-bvh-debug
     optimized dandelion-bvh
 )
