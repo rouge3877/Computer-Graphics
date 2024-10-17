@@ -101,33 +101,45 @@ void WhittedRenderer::render(Scene& scene)
 // 菲涅尔定理计算反射光线
 float WhittedRenderer::fresnel(const Vector3f& I, const Vector3f& N, const float& ior)
 {
-    // these lines below are just for compiling and can be deleted
-    (void)I;
-    (void)N;
-    (void)ior;
-    return INFINITY_FLOAT - EPSILON;
-    // these lines above are just for compiling and can be deleted
+    float cosi = clamp(-1.0f, 1.0f, I.dot(N));
+    float etai = 1.0f, etat = ior;
+    if (cosi > 0) {
+        std::swap(etai, etat);
+    }
+    // Compute sini using Snell's law
+    float sint = etai / etat * sqrtf(std::max(0.0f, 1.0f - cosi * cosi));
+    // Total internal reflection
+    if (sint >= 1.0f) {
+        return 1.0f;
+    } else {
+        float cost = sqrtf(std::max(0.0f, 1.0f - sint * sint));
+        cosi       = fabsf(cosi);
+        float Rs   = ((etat * cosi) - (etai * cost)) / ((etat * cosi) + (etai * cost));
+        float Rp   = ((etai * cosi) - (etat * cost)) / ((etai * cosi) + (etat * cost));
+        return (Rs * Rs + Rp * Rp) / 2.0f;
+    }
 }
 
 // 如果相交返回Intersection结构体，如果不相交则返回false
 std::optional<std::tuple<Intersection, GL::Material>> WhittedRenderer::trace(const Ray& ray,
                                                                              const Scene& scene)
 {
-    // this line below is just for compiling and can be deleted
-    (void)ray;
-
     std::optional<Intersection> payload;
     Eigen::Matrix4f M;
     GL::Material material;
     for (const auto& group : scene.groups) {
         for (const auto& object : group->objects) {
-
-            // this line below is just for compiling and can be deleted
-            (void)object;
-
-            // if use bvh(exercise 2.4): use object->bvh->intersect
-            // else(exercise 2.3): use naive_intersect()
-            // pay attention to the range of payload->t
+            M = object->model();
+            std::optional<Intersection> result;
+            if (use_bvh) {
+                result = object->bvh->intersect(ray, object->mesh, M);
+            } else {
+                result = naive_intersect(ray, object->mesh, M);
+            }
+            if (result.has_value() && (!payload.has_value() || result->t < payload->t)) {
+                payload = result;
+                material = object->mesh.material;
+            }
         }
     }
 
@@ -148,9 +160,6 @@ Vector3f WhittedRenderer::cast_ray(const Ray& ray, const Scene& scene, int depth
     // get the result of trace()
     auto result = trace(ray, scene);
 
-    // this line below is just for compiling and can be deleted
-    (void)result;
-
     // if result.has_value():
     // 1.judge the material_type
     // 2.if REFLECTION:
@@ -160,5 +169,52 @@ Vector3f WhittedRenderer::cast_ray(const Ray& ray, const Scene& scene, int depth
     //(1)compute shadow result using trace()
     //(2)hitcolor = diffuse*kd + specular*ks
 
+    auto _ior_ = 1.65f;
+
+    if(result.has_value()){
+        auto [intersection, material] = result.value();
+        Vector3f hit_point = ray.origin + ray.direction * intersection.t;
+        
+        MaterialType this_material_type = (material.shininess < 1000)? MaterialType::DIFFUSE_AND_GLOSSY : MaterialType::REFLECTION;
+        switch(this_material_type){
+            case MaterialType::REFLECTION:{
+                // 计算反射光线
+                Vector3f N = intersection.normal.normalized();
+                Vector3f reflect_direction = ray.direction - 2 * (ray.direction.dot(N)) * N;
+                reflect_direction.normalize();
+
+                auto kr = fresnel(ray.direction, intersection.normal, _ior_);
+                Ray reflection_ray(hit_point, reflect_direction);
+                // 递归调用 cast_ray 函数
+                hitcolor = cast_ray(reflection_ray, scene, depth + 1) * kr;
+                // printf("kr = %f\n", kr);
+                break;
+            }
+            case MaterialType::DIFFUSE_AND_GLOSSY:{
+                // 计算漫反射和镜面反射光线
+                Vector3f N = intersection.normal.normalized();
+                // printf("N: %f %f %f\n", N[0], N[1], N[2]);
+                Vector3f _hitcolor = Vector3f(0.0f, 0.0f, 0.0f);
+                for (const auto& light : scene.lights) {
+                    Vector3f L = (light.position - hit_point).normalized(); // 光线方向
+                    
+                    auto shadow_result = trace(Ray(hit_point, L), scene); // 计算阴影
+                    if (shadow_result.has_value()) continue;    // 如果有阴影则跳过
+
+                    Vector3f diffuse = material.diffuse * std::max(0.0f, N.dot(L));// 漫反射
+                    Vector3f V = -ray.direction.normalized(); // 视线方向
+                    Vector3f H = (L + V).normalized(); // 半角向量
+                    Vector3f specular = material.specular * std::pow(std::max(0.0f, intersection.normal.normalized().dot(H)), material.shininess);
+                    float light_attenuation = (light.position - hit_point).norm();
+                    light_attenuation = 1 / (light_attenuation * light_attenuation);
+                    _hitcolor += light.intensity * (diffuse + specular) * light_attenuation;
+                    (void)light_attenuation;
+                }
+                hitcolor = _hitcolor;                
+                break;
+            }
+
+        }
+    }
     return hitcolor;
 }
