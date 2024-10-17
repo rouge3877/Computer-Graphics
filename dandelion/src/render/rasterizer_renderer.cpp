@@ -101,6 +101,14 @@ void RasterizerRenderer::render(const Scene& scene)
             Uniforms::width       = static_cast<int>(this->width);
             Uniforms::height      = static_cast<int>(this->height);
             // To do: 同步
+            // {
+            //     std::unique_lock<std::mutex> lock(Context::vertex_queue_mutex);
+            //     Context::vertex_shader_output_queue = std::queue<VertexShaderPayload>();
+            // }
+            // {
+            //     std::unique_lock<std::mutex> lock(Context::rasterizer_queue_mutex);
+            //     Context::rasterizer_output_queue = std::queue<FragmentShaderPayload>();
+            // }
             Uniforms::material = object->mesh.material;
             Uniforms::lights   = scene.lights;
             Uniforms::camera   = scene.camera;
@@ -162,6 +170,7 @@ void VertexProcessor::worker_thread()
         VertexShaderPayload payload;
         {
             if (vertex_queue.empty()) {
+                printf("\n"); // Avoid the loop optimization bug
                 continue;
             }
             std::unique_lock<std::mutex> lock(queue_mutex);
@@ -193,6 +202,7 @@ void FragmentProcessor::worker_thread()
                 return;
             }
             if (Context::rasterizer_output_queue.empty()) {
+                printf("\n"); // Avoid the loop optimization bug
                 continue;
             }
             std::unique_lock<std::mutex> lock(Context::rasterizer_queue_mutex);
