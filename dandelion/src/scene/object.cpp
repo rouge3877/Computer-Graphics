@@ -73,53 +73,48 @@ Matrix4f Object::model() {
 
 void Object::update(vector<Object*>& all_objects)
 {
-    // 首先调用 step 函数计下一步该物体的运动学状态。
     KineticState current_state{center, velocity, force / mass};
     KineticState next_state = step(prev_state, current_state);
-    (void)next_state;
     // 将物体的位置移动到下一步状态处，但暂时不要修改物体的速度。
-    center = next_state.position;
-    // 遍历 all_objects，检查该物体在下一步状态的位置处是否会与其他物体发生碰撞。
+    this->center = next_state.position;
 
-    Matrix4f this_transform = this->model();
+    // Check collision with other objects.
     for (auto object : all_objects) {
         if(object == this) continue;
-
-        Matrix4f object_transform = object->model();
         
         for (size_t i = 0; i < mesh.edges.count(); ++i) {
             array<size_t, 2> v_indices = mesh.edge(i);
-            (void)v_indices;
-            // v_indices 中是这条边两个端点的索引，以这两个索引为参数调用 GL::Mesh::vertex
-            // 方法可以获得它们的坐标，进而用于构造射线。
-            Vector3f this_v0 = (this_transform * mesh.vertex(v_indices[0]).homogeneous()).block<3, 1>(0, 0);
-            Vector3f this_v1 = (this_transform * mesh.vertex(v_indices[1]).homogeneous()).block<3, 1>(0, 0);
+            Vector3f this_v0 = (this->model() * mesh.vertex(v_indices[0]).homogeneous()).hnormalized();
+            Vector3f this_v1 = (this->model() * mesh.vertex(v_indices[1]).homogeneous()).hnormalized();
 
-            Ray this_ray = Ray{this_v0, (this_v1 - this_v0).normalized()};
+            Ray this_edge_ray = Ray{this_v0, (this_v1 - this_v0).normalized()};
             std::optional<Intersection> intersection;
-            if (BVH_for_collision) {
-                intersection = object->bvh->intersect(this_ray, object->mesh, object_transform);
-            } else {
-                intersection =  naive_intersect(this_ray, object->mesh, object_transform);
-            }
-            // 根据求交结果，判断该物体与另一物体是否发生了碰撞。
-            // 如果发生碰撞，按动量定理计算两个物体碰撞后的速度，并将下一步状态的位置设为
-            // current_state.position ，以避免重复碰撞。
+            if (BVH_for_collision) intersection = object->bvh->intersect(this_edge_ray, object->mesh, object->model());
+            else intersection = naive_intersect(this_edge_ray, object->mesh, object->model());
+            
             if(intersection != std::nullopt && intersection->t <= (this_v1 - this_v0).norm()){
                 next_state.position = current_state.position;
                 // 在碰撞过程中，为什么冲量 j_r ​是沿着法向 n 而不是沿着物体的运动方向
-                
+                // 存在问题：当物体的速度，距离，以及刷新帧率满足一定条件时，交面的法向量会垂直于速度方向
+                // 从而导致冲量的方向与速度方向相反，这样会导致物体的速度变为0，从而无法继续运动
+                // 初步的分析是，这时候由于物体恰好接壤，因此此时作任意边到另一物体面的交点实际上都是不存在的
+                // 已解决：在鉴定存在碰撞后，next_state = step(current_state, next_state);
+                // 解决原因：TODO
+
                 float impulse = -2.0f * (next_state.velocity - object->velocity).dot(intersection->normal) / (1 / mass + 1 / object->mass);
-                next_state.velocity = next_state.velocity + impulse / mass * intersection->normal;
-                object->velocity = object->velocity - impulse / object->mass * intersection->normal;
+                next_state.velocity = next_state.velocity + (impulse / this->mass) * intersection->normal;
+                object->velocity = object->velocity - (impulse / object->mass) * intersection->normal;
+
+                next_state = step(current_state, next_state); // Amazing... Who can interpret it!!!
                 break;
             }
         }
     }
     // 将上一步状态赋值为当前状态，并将物体更新到下一步状态。
-    center = next_state.position;
-    velocity = next_state.velocity;
-    prev_state = current_state;
+    this->center = next_state.position;
+    this->velocity = next_state.velocity;
+    this->force = next_state.acceleration * mass;
+    this->prev_state = current_state;
 }
 
 void Object::render(const Shader& shader, WorkingMode mode, bool selected)
