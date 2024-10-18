@@ -76,7 +76,7 @@ bool Rasterizer::inside_triangle(int x, int y, const Vector4f* vertices)
     float beta = std::get<1>(compute_barycentric_2d_res);
     float gamma = std::get<2>(compute_barycentric_2d_res);
 
-    return alpha >= 0 && beta >= 0 && gamma > 0;
+    return alpha >= 0 && beta >= 0 && gamma >= 0;
 }
 
 // 给定坐标(x,y)以及三角形的三个顶点坐标，计算(x,y)对应的重心坐标[alpha, beta, gamma]
