@@ -99,25 +99,31 @@ void WhittedRenderer::render(Scene& scene)
 }
 
 // 菲涅尔定理计算反射光线
-float WhittedRenderer::fresnel(const Vector3f& I, const Vector3f& N, const float& ior)
-{
-    float cosi = clamp(-1.0f, 1.0f, I.dot(N));
-    float etai = 1.0f, etat = ior;
-    if (cosi > 0) {
+float WhittedRenderer::fresnel(const Vector3f& I, const Vector3f& N, const float& ior) {
+    // 确保入射光线与法线的方向一致
+    float cosI = std::max(-1.0f, std::min(1.0f, I.dot(N)));
+    float etai = 1.0f;
+    float etat = ior;
+
+    // 如果入射光线与法线的夹角为钝角，则交换折射率
+    if (cosI < 0) {
+        cosI = -cosI; // 取入射角的绝对值
+    } else {
         std::swap(etai, etat);
     }
-    // Compute sini using Snell's law
-    float sint = etai / etat * sqrtf(std::max(0.0f, 1.0f - cosi * cosi));
-    // Total internal reflection
-    if (sint >= 1.0f) {
+
+    float sinT2 = etai * etai * (1.0f - cosI * cosI) / (etat * etat);
+    // 如果全反射，则返回1.0
+    if (sinT2 > 1.0f) {
         return 1.0f;
-    } else {
-        float cost = sqrtf(std::max(0.0f, 1.0f - sint * sint));
-        cosi       = fabsf(cosi);
-        float Rs   = ((etat * cosi) - (etai * cost)) / ((etat * cosi) + (etai * cost));
-        float Rp   = ((etai * cosi) - (etat * cost)) / ((etai * cosi) + (etat * cost));
-        return (Rs * Rs + Rp * Rp) / 2.0f;
     }
+
+    float cosT = std::sqrt(1.0f - sinT2);
+
+    float Rparl = ((etat * cosI) - (etai * cosT)) / ((etat * cosI) + (etai * cosT));
+    float Rperp = ((etai * cosI) - (etat * cosT)) / ((etai * cosI) + (etat * cosT));
+    
+    return 0.5f * (Rparl * Rparl + Rperp * Rperp);
 }
 
 // 如果相交返回Intersection结构体，如果不相交则返回false
@@ -143,10 +149,8 @@ std::optional<std::tuple<Intersection, GL::Material>> WhittedRenderer::trace(con
         }
     }
 
-    if (!payload.has_value()) {
-        return std::nullopt;
-    }
-    return std::make_tuple(payload.value(), material);
+    return payload.has_value() ? std::make_optional(std::make_tuple(payload.value(), material))
+                               : std::nullopt;
 }
 
 // Whitted-style的光线传播算法实现
@@ -169,11 +173,11 @@ Vector3f WhittedRenderer::cast_ray(const Ray& ray, const Scene& scene, int depth
     //(1)compute shadow result using trace()
     //(2)hitcolor = diffuse*kd + specular*ks
 
-    auto _ior_ = 1.65f;
-
+    auto _ior_ = 135.0f; // a high ior means almost mirror reflection
     if(result.has_value()){
         auto [intersection, material] = result.value();
         Vector3f hit_point = ray.origin + ray.direction * intersection.t;
+        hit_point += intersection.normal * EPSILON;
         
         MaterialType this_material_type = (material.shininess < 1000)? MaterialType::DIFFUSE_AND_GLOSSY : MaterialType::REFLECTION;
         switch(this_material_type){

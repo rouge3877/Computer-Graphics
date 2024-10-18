@@ -68,42 +68,39 @@ optional<Intersection> ray_triangle_intersect(const Ray& ray, const GL::Mesh& me
 
 optional<Intersection> naive_intersect(const Ray& ray, const GL::Mesh& mesh, const Matrix4f model)
 {
-    Intersection result;
-    result.t = infinity + 1;
-    for (size_t i = 0; i < mesh.faces.count(); ++i) {
-        // Vertex a, b and c are assumed to be in counterclockwise order.
-        // Construct matrix A = [d, a - b, a - c] and solve Ax = (a - origin)
-        // Matrix A is not invertible, indicating the ray is parallel with the triangle.
-        // Test if alpha, beta and gamma are all between 0 and 1.
-        
-        std::array<size_t, 3> facesIndex = mesh.face(i);
+    optional<Intersection> result;
+    float min_t_in_scoop = std::numeric_limits<float>::infinity();
 
-        Vector3f v0 = (model * mesh.vertex(facesIndex[0]).homogeneous()).head<3>();
-        Vector3f v1 = (model * mesh.vertex(facesIndex[1]).homogeneous()).head<3>();
-        Vector3f v2 = (model * mesh.vertex(facesIndex[2]).homogeneous()).head<3>();
+    for (size_t i = 0; i < mesh.faces.count(); i++) {
+        const auto& face = mesh.face(i);
+        float this_t;
 
-        Matrix3f M;
-        M << -ray.direction, v1 - v0, v2 - v0;
+        Vector3f this_vertex_a = (model * mesh.vertex(face[0]).homogeneous()).hnormalized();
+        Vector3f this_vertex_b = (model * mesh.vertex(face[1]).homogeneous()).hnormalized();
+        Vector3f this_vertex_c = (model * mesh.vertex(face[2]).homogeneous()).hnormalized();
+        Vector3f this_normal = (this_vertex_b - this_vertex_a).cross(this_vertex_c - this_vertex_a).normalized();
 
-        float det = M.determinant();
-        if(std::fabs(det) < eps){
-            continue;
+        if (std::abs(this_normal.dot(ray.direction)) < eps) {
+            continue; // avoid devide ZERO
+        }else{
+            this_t = (this_vertex_a - ray.origin).dot(this_normal) / this_normal.dot(ray.direction);
+            if (this_t < eps || this_t >= min_t_in_scoop) continue;
         }
 
-        Vector3f res = M.inverse() * (ray.origin - v0);
-        float t = res[0], beta = res[1], gamma = res[2], alpha = 1 - gamma - beta;
-        if(t < eps || alpha < 0 || beta < 0 || gamma < 0){
-            continue;
-        }else if(t < result.t){
-            result.t = t;
-            result.face_index = i;
-            result.barycentric_coord = {alpha, beta, gamma};
-            result.normal = ((v1 - v0).cross(v2 - v0)).normalized();
+        Vector3f cross_point = ray.origin + this_t * ray.direction;
+
+        if (this_normal.dot((this_vertex_b - this_vertex_a).cross(cross_point - this_vertex_a)) < 0) continue;
+        else if (this_normal.dot((this_vertex_c - this_vertex_b).cross(cross_point - this_vertex_b)) < 0) continue;
+        else if (this_normal.dot((this_vertex_a - this_vertex_c).cross(cross_point - this_vertex_c)) < 0) continue;
+        else if (this_t < min_t_in_scoop) {
+            Intersection _result;
+            min_t_in_scoop = this_t;
+            _result.t = this_t;
+            _result.barycentric_coord = cross_point;
+            _result.normal = this_normal;
+            result = _result;
         }
     }
-    // Ensure result.t is strictly less than the constant `infinity`.
-    if (result.t - infinity < -eps) {
-        return result;
-    }
-    return std::nullopt;
+
+    return (min_t_in_scoop < std::numeric_limits<float>::infinity()) ? result : std::nullopt;
 }
